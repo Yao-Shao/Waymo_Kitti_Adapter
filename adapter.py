@@ -11,14 +11,16 @@ from waymo_open_dataset.utils import transform_utils
 from waymo_open_dataset import dataset_pb2 as open_dataset
 
 ############Config#############################################################
-os.environ['PYTHONPATH']='/home/cyrus/waymo-od'
-m=imp.find_module('waymo_open_dataset', ['/home/cyrus/waymo-od'])
-imp.load_module('waymo_open_dataset', m[0], m[1], m[2])
-
-GLOBAL_PATH = '/home/cyrus/waymo-od/'
-DATA_PATH = GLOBAL_PATH + 'waymo_dataset/'
-LABEL_PATH = GLOBAL_PATH + 'kitti_dataset/label_2/'
+GLOBAL_PATH = '/home/cyrus/Research/Waymo_Kitti_Adapter'
+# path to waymo dataset "folder" (all the file in that folder will be converted)
+DATA_PATH = GLOBAL_PATH + '/waymo_dataset/'
+# path to save kitti dataset
+LABEL_PATH = GLOBAL_PATH + '/kitti_dataset/label_2/'
 INDEX_LENGTH = 6
+
+os.environ['PYTHONPATH'] = GLOBAL_PATH
+m = imp.find_module('waymo_open_dataset', [GLOBAL_PATH])
+imp.load_module('waymo_open_dataset', m[0], m[1], m[2])
 ###############################################################################
 
 class Adapter:
@@ -34,6 +36,7 @@ class Adapter:
     def cvt(self):
         tf.enable_eager_execution()
         frame_num = 0
+        print("start converting ...")
         for file_name in self.__file_names:
             # read one frame
             dataset = tf.data.TFRecordDataset(file_name, compression_type='')
@@ -78,7 +81,7 @@ class Adapter:
                     alpha = (rotation_y + beta - math.pi / 2) % (2 * math.pi)
 
                     # save the labels
-                    line = my_type + ' {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}\n'.format(round(truncated, 2),
+                    line = my_type + ' {} {} {} {} {} {} {} {} {} {} {} {} {} {}\n'.format(round(truncated, 2),
                                                                                             occluded,
                                                                                             round(alpha, 2),
                                                                                             round(bounding_box[0], 2),
@@ -91,12 +94,12 @@ class Adapter:
                                                                                             round(x, 2),
                                                                                             round(y, 2),
                                                                                             round(z, 2),
-                                                                                            round(rotation_y, 2),
-                                                                                            id)
-                    print(line)
+                                                                                            round(rotation_y, 2))
+                    # print(line)
                     fp.write(line)
                 frame_num += 1
                 fp.close()
+        print("finished ...")
 
     def image_show(self, data, name, layout, cmap=None):
         """Show an image."""
