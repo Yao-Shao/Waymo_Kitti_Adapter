@@ -8,7 +8,7 @@ This is a tool converting [Waymo open dataset](https://waymo.com/open/) format t
 1. Clone this repo to your computer, then copy the files in `protocol buffer` folder and put them into `waymo open dataset` folder.
 2. Copy adapter.py to waymo's repo. Open adapter.py and change the configurations at the top so that it suits to your own computer's path.
 3. Run adapter.py.
-The folder tree may look like this:
+4. The folder tree may look like this:
 ```
 .
 ├── Waymo_Kitti_Adapter
