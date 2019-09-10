@@ -1,5 +1,5 @@
 # Waymo_Kitti_Adapter
-A tool translate [Waymo open dataset](https://waymo.com/open/) to [Kitti dataset](http://www.cvlibs.net/datasets/kitti/)
+This is a tool converting [Waymo open dataset](https://waymo.com/open/) format to [Kitti dataset](http://www.cvlibs.net/datasets/kitti/) format.
 - Author: Yao Shao
 - Contact: yshao998@gmail.com 
 ## Instruction
