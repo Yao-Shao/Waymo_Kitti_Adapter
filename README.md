@@ -1,7 +1,7 @@
 # Waymo_Kitti_Adapter
 A tool translate [Waymo open dataset](https://waymo.com/open/) to [Kitti dataset](http://www.cvlibs.net/datasets/kitti/)
-- Author Yao Shao
-- Contact 
+- Author: Yao Shao
+- Contact: yshao998@gmail.com 
 ## Instruction
 1. open adapter.py, change the configurations so that it suits to your own computer path.
 2. run adapter.py.
