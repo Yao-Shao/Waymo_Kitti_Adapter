@@ -11,7 +11,7 @@ This is a tool converting [Waymo open dataset](https://waymo.com/open/) format t
 4. The folder tree may look like this:
 ```
 .
-├── Waymo_Kitti_Adapter
+├── waymo-od
 │   ├── adapter.py
 │   ├── docs
 │   ├── kitti_dataset
