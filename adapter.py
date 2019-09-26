@@ -3,8 +3,9 @@ import imp
 import tensorflow as tf
 import math
 import numpy as np
-import itertools
+import cv2
 import matplotlib.pyplot as plt
+import base64
 
 from waymo_open_dataset.utils import range_image_utils
 from waymo_open_dataset.utils import transform_utils
@@ -16,6 +17,7 @@ GLOBAL_PATH = '/home/cyrus/Research/Waymo_Kitti_Adapter'
 DATA_PATH = GLOBAL_PATH + '/waymo_dataset/'
 # path to save kitti dataset
 LABEL_PATH = GLOBAL_PATH + '/kitti_dataset/label_2/'
+IMAGE_PATH = GLOBAL_PATH + '/kitti_dataset/image_2/'
 INDEX_LENGTH = 6
 
 os.environ['PYTHONPATH'] = GLOBAL_PATH
@@ -41,9 +43,15 @@ class Adapter:
             # read one frame
             dataset = tf.data.TFRecordDataset(file_name, compression_type='')
             for data in dataset:
-                fp = open(LABEL_PATH + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.txt', 'w+')
+                fp_label = open(LABEL_PATH + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.txt', 'w+')
                 frame = open_dataset.Frame()
                 frame.ParseFromString(bytearray(data.numpy()))
+
+                # store the image:
+                img_path = IMAGE_PATH + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.png'
+                img = cv2.imdecode(np.frombuffer(frame.images[0].image, np.uint8), cv2.IMREAD_COLOR)
+                rgb_img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+                plt.imsave(img_path, rgb_img,format='png')
 
                 # parse the label
                 # # context is the same for all frames in the same segment(file)
@@ -96,9 +104,10 @@ class Adapter:
                                                                                             round(z, 2),
                                                                                             round(rotation_y, 2))
                     # print(line)
-                    fp.write(line)
+                    # store the label
+                    fp_label.write(line)
                 frame_num += 1
-                fp.close()
+                fp_label.close()
         print("finished ...")
 
     def image_show(self, data, name, layout, cmap=None):
