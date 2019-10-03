@@ -1,4 +1,3 @@
-# image camera direction
 import os
 import imp
 import tensorflow as tf
@@ -7,6 +6,7 @@ import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 import pcl
+import progressbar
 
 from waymo_open_dataset.utils import range_image_utils
 from waymo_open_dataset.utils import transform_utils
@@ -17,11 +17,12 @@ GLOBAL_PATH = '/home/cyrus/Research/Waymo_Kitti_Adapter'
 # path to waymo dataset "folder" (all the file in that folder will be converted)
 DATA_PATH = GLOBAL_PATH + '/waymo_dataset/'
 # path to save kitti dataset
-LABEL_PATH = GLOBAL_PATH + '/kitti_dataset/label'
-IMAGE_PATH = GLOBAL_PATH + '/kitti_dataset/image_'
-CALIB_PATH = GLOBAL_PATH + '/kitti_dataset/calib'
-LIDAR_PATH = GLOBAL_PATH + '/kitti_dataset/lidar'
-INDEX_LENGTH = 6
+KITTI_PATH = GLOBAL_PATH + '/kitti_dataset/'
+LABEL_PATH = KITTI_PATH + 'label'
+IMAGE_PATH = KITTI_PATH + 'image_'
+CALIB_PATH = KITTI_PATH + 'calib'
+LIDAR_PATH = KITTI_PATH + 'lidar'
+INDEX_LENGTH = 6    # max indexing length
 
 os.environ['PYTHONPATH'] = GLOBAL_PATH
 m = imp.find_module('waymo_open_dataset', [GLOBAL_PATH])
@@ -32,147 +33,177 @@ class Adapter:
     def __init__(self):
         # get all segment file name
         self.__file_names = [(DATA_PATH + i) for i in os.listdir(DATA_PATH)]
-        # if not os.path.exists(LABEL_PATH):
-        #     os.mkdir(GLOBAL_PATH + LABEL_PATH)
+
+        if not os.path.exists(KITTI_PATH):
+            os.mkdir(KITTI_PATH)
+            os.mkdir(LABEL_PATH)
+            os.mkdir(CALIB_PATH)
+            os.mkdir(LIDAR_PATH)
+            for i in range(5):
+                os.mkdir(IMAGE_PATH + str(i))
 
         self.__lidar_list = ['_FRONT', '_FRONT_RIGHT', '_FRONT_LEFT', '_SIDE_RIGHT', '_SIDE_LEFT']
         self.__type_list = ['UNKNOWN', 'VEHICLE', 'PEDESTRIAN', 'SIGN', 'CYCLIST']
 
     def cvt(self):
+        bar = progressbar.ProgressBar(maxval=len(self.__file_names)+1, \
+                    widgets= [progressbar.Percentage(), ' ', progressbar.Bar(marker='>',left='[',right=']'),' ', progressbar.ETA()])
         tf.enable_eager_execution()
+        file_num = 1
         frame_num = 0
         print("start converting ...")
+        bar.start()
         for file_name in self.__file_names:
-            # read one frame
             dataset = tf.data.TFRecordDataset(file_name, compression_type='')
             for data in dataset:
                 frame = open_dataset.Frame()
                 frame.ParseFromString(bytearray(data.numpy()))
+                # save the image:
+                self.save_image(frame, frame_num)
 
-                # # save the image:
-                for img_num in range(5):
-                    img_path = IMAGE_PATH + str(img_num) + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.png'
-                    img = cv2.imdecode(np.frombuffer(frame.images[img_num].image, np.uint8), cv2.IMREAD_COLOR)
-                    rgb_img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-                    plt.imsave(img_path, rgb_img,format='png')
-
-                # save the calib
-                fp_calib = open(CALIB_PATH + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.txt', 'w+')
-
-                Tr_velo_to_cam = []
-                for laser in frame.context.laser_calibrations:
-                    Tr_velo_to_cam.append(["%e"%i for i in laser.extrinsic.transform])
-                camera_calib = []
-                for cam in frame.context.camera_calibrations:
-                    camera_calib.append(["%e"%i for i in cam.intrinsic])
-                Tr_imu_to_velo = ['%e'%(0.0) for i in range(12)]
-
-                R0_rect = ["%e"%i for i in np.eye(4).flatten()[:12]]
-                calib_context = "P0: " + " ".join(camera_calib[0]) + '\n' + "P1: " + " ".join(camera_calib[1]) + '\n' "P2: " + " ".join(camera_calib[2]) + '\n' "P3: " + " ".join(camera_calib[3]) + '\n' "P4: " + " ".join(camera_calib[4]) + '\n'
-                calib_context += "R0_rect: " + " ".join(R0_rect) + '\n'
-                calib_context += "Tr_velo_to_cam_0: " + " ".join(Tr_velo_to_cam[0]) + '\n' + "Tr_velo_to_cam_1: " + " ".join(Tr_velo_to_cam[1]) + '\n' + "Tr_velo_to_cam_2: " + " ".join(Tr_velo_to_cam[2]) + '\n' + "Tr_velo_to_cam_3: " + " ".join(Tr_velo_to_cam[3]) + '\n' + "Tr_velo_to_cam_4: " + " ".join(Tr_velo_to_cam[4]) + '\n'
-                calib_context += "Tr_imu_to_velo: " + " ".join(Tr_imu_to_velo)
-                fp_calib.write(calib_context)
-                fp_calib.close()
+                # parse the calib
+                self.save_calib(frame, frame_num)
 
                 # parse lidar
-                (range_images,
-                 camera_projections,
-                 range_image_top_pose) = self.parse_range_image_and_camera_projection(
-                    frame)
+                self.save_lidar(frame, frame_num)
 
-                points, cp_points = self.convert_range_image_to_point_cloud(
-                    frame,
-                    range_images,
-                    camera_projections,
-                    range_image_top_pose)
-                points_ri2, cp_points_ri2 = self.convert_range_image_to_point_cloud(
-                    frame,
-                    range_images,
-                    camera_projections,
-                    range_image_top_pose,
-                    ri_index=1)
+                # parse label
+                self.save_label(frame, frame_num)
 
-                # 3d points in vehicle frame.
-                points_all = np.concatenate(points, axis=0)
-                points_all_ri2 = np.concatenate(points_ri2, axis=0)
-
-                pc_1 = pcl.PointCloud()
-                pc_1.from_array(points_all)
-                pc_path_1 = LIDAR_PATH + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.pcd'
-                pcl.save(pc_1, pc_path_1)
-
-                """ 
-                for lidar_num in range(5):
-                    intensity_0, intensity_1 = self.extract_intensity(frame, range_images, lidar_num+1)
-                    tmp = np.column_stack((points[lidar_num], intensity_0)).astype(np.float32)
-                    print("hhh")
-                    pc_1 = pcl.PointCloud()
-                    pc_2 = pcl.PointCloud()
-                    pc_1.from_array(np.hstack((points[lidar_num], intensity_0)).astype(np.float32))
-                    pc_2.from_array(np.hstack((points_ri2[lidar_num], intensity_1)).astype(np.float32))
-                    pc_path_1 = IMAGE_PATH + '/' + str(lidar_num) + '/1/' + str(frame_num).zfill(INDEX_LENGTH) + '.pcd'
-                    pc_path_2 = IMAGE_PATH + '/' + str(lidar_num) + '/2/' + str(frame_num).zfill(INDEX_LENGTH) + '.pcd'
-                    pcl.save(pc_1,pc_path_1)
-                    pcl.save(pc_2, pc_path_2)
-                """
-
-                # parse the label
-
-                fp_label = open(LABEL_PATH + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.txt', 'w+')
-
-                # preprocess bounding box data
-                id_to_bbox = dict()
-                for labels in frame.projected_lidar_labels:
-                    for label in labels.labels:
-                        bbox = [label.box.center_x - label.box.length / 2, label.box.center_y + label.box.width / 2,
-                                label.box.center_x + label.box.length / 2, label.box.center_y - label.box.width / 2]
-                        id_to_bbox[label.id] = bbox
-
-                for obj in frame.laser_labels:
-                    # caculate bounding box
-                    bounding_box = None
-                    id = obj.id
-                    for lidar in self.__lidar_list:
-                        if id + lidar in id_to_bbox:
-                            bounding_box = id_to_bbox.get(id + lidar)
-                    if bounding_box == None:
-                        continue
-
-                    my_type = self.__type_list[obj.type]
-                    truncated = 0
-                    occluded = 0
-                    height = obj.box.height
-                    width = obj.box.width
-                    length = obj.box.length
-                    x = obj.box.center_x
-                    y = obj.box.center_y
-                    z = obj.box.center_z
-                    rotation_y = obj.box.heading
-                    beta = math.atan2(x, z)
-                    alpha = (rotation_y + beta - math.pi / 2) % (2 * math.pi)
-
-                    # save the labels
-                    line = my_type + ' {} {} {} {} {} {} {} {} {} {} {} {} {} {}\n'.format(round(truncated, 2),
-                                                                                            occluded,
-                                                                                            round(alpha, 2),
-                                                                                            round(bounding_box[0], 2),
-                                                                                            round(bounding_box[1], 2),
-                                                                                            round(bounding_box[2], 2),
-                                                                                            round(bounding_box[3], 2),
-                                                                                            round(height, 2),
-                                                                                            round(width, 2),
-                                                                                            round(length, 2),
-                                                                                            round(x, 2),
-                                                                                            round(y, 2),
-                                                                                            round(z, 2),
-                                                                                            round(rotation_y, 2))
-                    # print(line)
-                    # store the label
-                    fp_label.write(line)
                 frame_num += 1
-                fp_label.close()
-        print("finished ...")
+
+            bar.update(file_num)
+            file_num += 1
+        bar.finish()
+        print("\nfinished ...")
+
+    def save_image(self, frame, frame_num):
+        for img_num in range(5):
+            img_path = IMAGE_PATH + str(img_num) + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.png'
+            img = cv2.imdecode(np.frombuffer(frame.images[img_num].image, np.uint8), cv2.IMREAD_COLOR)
+            rgb_img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+            plt.imsave(img_path, rgb_img, format='png')
+
+    def save_calib(self, frame, frame_num):
+        fp_calib = open(CALIB_PATH + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.txt', 'w+')
+
+        Tr_velo_to_cam = []
+        for laser in frame.context.laser_calibrations:
+            Tr_velo_to_cam.append(["%e" % i for i in laser.extrinsic.transform])
+        camera_calib = []
+        for cam in frame.context.camera_calibrations:
+            camera_calib.append(["%e" % i for i in cam.intrinsic])
+        Tr_imu_to_velo = ['%e' % (0.0) for i in range(12)]
+
+        R0_rect = ["%e" % i for i in np.eye(4).flatten()[:12]]
+        calib_context = "P0: " + " ".join(camera_calib[0]) + '\n' + "P1: " + " ".join(
+            camera_calib[1]) + '\n' "P2: " + " ".join(camera_calib[2]) + '\n' "P3: " + " ".join(
+            camera_calib[3]) + '\n' "P4: " + " ".join(camera_calib[4]) + '\n'
+        calib_context += "R0_rect: " + " ".join(R0_rect) + '\n'
+        calib_context += "Tr_velo_to_cam_0: " + " ".join(Tr_velo_to_cam[0]) + '\n' + "Tr_velo_to_cam_1: " + " ".join(
+            Tr_velo_to_cam[1]) + '\n' + "Tr_velo_to_cam_2: " + " ".join(
+            Tr_velo_to_cam[2]) + '\n' + "Tr_velo_to_cam_3: " + " ".join(
+            Tr_velo_to_cam[3]) + '\n' + "Tr_velo_to_cam_4: " + " ".join(Tr_velo_to_cam[4]) + '\n'
+        calib_context += "Tr_imu_to_velo: " + " ".join(Tr_imu_to_velo)
+        fp_calib.write(calib_context)
+        fp_calib.close()
+
+    def save_lidar(self, frame, frame_num):
+        (range_images,
+         camera_projections,
+         range_image_top_pose) = self.parse_range_image_and_camera_projection(
+            frame)
+
+        points, cp_points = self.convert_range_image_to_point_cloud(
+            frame,
+            range_images,
+            camera_projections,
+            range_image_top_pose)
+        points_ri2, cp_points_ri2 = self.convert_range_image_to_point_cloud(
+            frame,
+            range_images,
+            camera_projections,
+            range_image_top_pose,
+            ri_index=1)
+
+        # 3d points in vehicle frame.
+        points_all = np.concatenate(points, axis=0)
+        points_all_ri2 = np.concatenate(points_ri2, axis=0)
+
+        pc_1 = pcl.PointCloud()
+        pc_1.from_array(points_all)
+        pc_path_1 = LIDAR_PATH + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.pcd'
+        pcl.save(pc_1, pc_path_1)
+
+        """ 
+        for lidar_num in range(5):
+            intensity_0, intensity_1 = self.extract_intensity(frame, range_images, lidar_num+1)
+            tmp = np.column_stack((points[lidar_num], intensity_0)).astype(np.float32)
+            print("hhh")
+            pc_1 = pcl.PointCloud()
+            pc_2 = pcl.PointCloud()
+            pc_1.from_array(np.hstack((points[lidar_num], intensity_0)).astype(np.float32))
+            pc_2.from_array(np.hstack((points_ri2[lidar_num], intensity_1)).astype(np.float32))
+            pc_path_1 = IMAGE_PATH + '/' + str(lidar_num) + '/1/' + str(frame_num).zfill(INDEX_LENGTH) + '.pcd'
+            pc_path_2 = IMAGE_PATH + '/' + str(lidar_num) + '/2/' + str(frame_num).zfill(INDEX_LENGTH) + '.pcd'
+            pcl.save(pc_1,pc_path_1)
+            pcl.save(pc_2, pc_path_2)
+        """
+
+    def save_label(self, frame, frame_num):
+
+        fp_label = open(LABEL_PATH + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.txt', 'w+')
+
+        # preprocess bounding box data
+        id_to_bbox = dict()
+        for labels in frame.projected_lidar_labels:
+            for label in labels.labels:
+                bbox = [label.box.center_x - label.box.length / 2, label.box.center_y + label.box.width / 2,
+                        label.box.center_x + label.box.length / 2, label.box.center_y - label.box.width / 2]
+                id_to_bbox[label.id] = bbox
+
+        for obj in frame.laser_labels:
+            # caculate bounding box
+            bounding_box = None
+            id = obj.id
+            for lidar in self.__lidar_list:
+                if id + lidar in id_to_bbox:
+                    bounding_box = id_to_bbox.get(id + lidar)
+            if bounding_box == None:
+                continue
+
+            my_type = self.__type_list[obj.type]
+            truncated = 0
+            occluded = 0
+            height = obj.box.height
+            width = obj.box.width
+            length = obj.box.length
+            x = obj.box.center_x
+            y = obj.box.center_y
+            z = obj.box.center_z
+            rotation_y = obj.box.heading
+            beta = math.atan2(x, z)
+            alpha = (rotation_y + beta - math.pi / 2) % (2 * math.pi)
+
+            # save the labels
+            line = my_type + ' {} {} {} {} {} {} {} {} {} {} {} {} {} {}\n'.format(round(truncated, 2),
+                                                                                   occluded,
+                                                                                   round(alpha, 2),
+                                                                                   round(bounding_box[0], 2),
+                                                                                   round(bounding_box[1], 2),
+                                                                                   round(bounding_box[2], 2),
+                                                                                   round(bounding_box[3], 2),
+                                                                                   round(height, 2),
+                                                                                   round(width, 2),
+                                                                                   round(length, 2),
+                                                                                   round(x, 2),
+                                                                                   round(y, 2),
+                                                                                   round(z, 2),
+                                                                                   round(rotation_y, 2))
+            # print(line)
+            # store the label
+            fp_label.write(line)
+        fp_label.close()
 
     def extract_intensity(self, frame, range_images, lidar_num):
         intensity_0 = np.array(range_images[lidar_num][0].data).reshape(-1,4)
