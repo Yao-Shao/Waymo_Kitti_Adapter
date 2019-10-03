@@ -5,7 +5,7 @@ import math
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
-# import pcl
+import pcl
 import progressbar
 
 from waymo_open_dataset.utils import range_image_utils
