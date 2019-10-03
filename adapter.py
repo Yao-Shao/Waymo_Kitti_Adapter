@@ -1,3 +1,4 @@
+# image camera direction
 import os
 import imp
 import tensorflow as tf
@@ -5,7 +6,7 @@ import math
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
-import base64
+import pcl
 
 from waymo_open_dataset.utils import range_image_utils
 from waymo_open_dataset.utils import transform_utils
@@ -16,8 +17,10 @@ GLOBAL_PATH = '/home/cyrus/Research/Waymo_Kitti_Adapter'
 # path to waymo dataset "folder" (all the file in that folder will be converted)
 DATA_PATH = GLOBAL_PATH + '/waymo_dataset/'
 # path to save kitti dataset
-LABEL_PATH = GLOBAL_PATH + '/kitti_dataset/label_2/'
-IMAGE_PATH = GLOBAL_PATH + '/kitti_dataset/image_2/'
+LABEL_PATH = GLOBAL_PATH + '/kitti_dataset/label'
+IMAGE_PATH = GLOBAL_PATH + '/kitti_dataset/image_'
+CALIB_PATH = GLOBAL_PATH + '/kitti_dataset/calib'
+LIDAR_PATH = GLOBAL_PATH + '/kitti_dataset/lidar'
 INDEX_LENGTH = 6
 
 os.environ['PYTHONPATH'] = GLOBAL_PATH
@@ -43,19 +46,80 @@ class Adapter:
             # read one frame
             dataset = tf.data.TFRecordDataset(file_name, compression_type='')
             for data in dataset:
-                fp_label = open(LABEL_PATH + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.txt', 'w+')
                 frame = open_dataset.Frame()
                 frame.ParseFromString(bytearray(data.numpy()))
 
-                # store the image:
-                img_path = IMAGE_PATH + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.png'
-                img = cv2.imdecode(np.frombuffer(frame.images[0].image, np.uint8), cv2.IMREAD_COLOR)
-                rgb_img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-                plt.imsave(img_path, rgb_img,format='png')
+                # # save the image:
+                for img_num in range(5):
+                    img_path = IMAGE_PATH + str(img_num) + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.png'
+                    img = cv2.imdecode(np.frombuffer(frame.images[img_num].image, np.uint8), cv2.IMREAD_COLOR)
+                    rgb_img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+                    plt.imsave(img_path, rgb_img,format='png')
+
+                # save the calib
+                fp_calib = open(CALIB_PATH + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.txt', 'w+')
+
+                Tr_velo_to_cam = []
+                for laser in frame.context.laser_calibrations:
+                    Tr_velo_to_cam.append(["%e"%i for i in laser.extrinsic.transform])
+                camera_calib = []
+                for cam in frame.context.camera_calibrations:
+                    camera_calib.append(["%e"%i for i in cam.intrinsic])
+                Tr_imu_to_velo = ['%e'%(0.0) for i in range(12)]
+
+                R0_rect = ["%e"%i for i in np.eye(4).flatten()[:12]]
+                calib_context = "P0: " + " ".join(camera_calib[0]) + '\n' + "P1: " + " ".join(camera_calib[1]) + '\n' "P2: " + " ".join(camera_calib[2]) + '\n' "P3: " + " ".join(camera_calib[3]) + '\n' "P4: " + " ".join(camera_calib[4]) + '\n'
+                calib_context += "R0_rect: " + " ".join(R0_rect) + '\n'
+                calib_context += "Tr_velo_to_cam_0: " + " ".join(Tr_velo_to_cam[0]) + '\n' + "Tr_velo_to_cam_1: " + " ".join(Tr_velo_to_cam[1]) + '\n' + "Tr_velo_to_cam_2: " + " ".join(Tr_velo_to_cam[2]) + '\n' + "Tr_velo_to_cam_3: " + " ".join(Tr_velo_to_cam[3]) + '\n' + "Tr_velo_to_cam_4: " + " ".join(Tr_velo_to_cam[4]) + '\n'
+                calib_context += "Tr_imu_to_velo: " + " ".join(Tr_imu_to_velo)
+                fp_calib.write(calib_context)
+                fp_calib.close()
+
+                # parse lidar
+                (range_images,
+                 camera_projections,
+                 range_image_top_pose) = self.parse_range_image_and_camera_projection(
+                    frame)
+
+                points, cp_points = self.convert_range_image_to_point_cloud(
+                    frame,
+                    range_images,
+                    camera_projections,
+                    range_image_top_pose)
+                points_ri2, cp_points_ri2 = self.convert_range_image_to_point_cloud(
+                    frame,
+                    range_images,
+                    camera_projections,
+                    range_image_top_pose,
+                    ri_index=1)
+
+                # 3d points in vehicle frame.
+                points_all = np.concatenate(points, axis=0)
+                points_all_ri2 = np.concatenate(points_ri2, axis=0)
+
+                pc_1 = pcl.PointCloud()
+                pc_1.from_array(points_all)
+                pc_path_1 = LIDAR_PATH + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.pcd'
+                pcl.save(pc_1, pc_path_1)
+
+                """ 
+                for lidar_num in range(5):
+                    intensity_0, intensity_1 = self.extract_intensity(frame, range_images, lidar_num+1)
+                    tmp = np.column_stack((points[lidar_num], intensity_0)).astype(np.float32)
+                    print("hhh")
+                    pc_1 = pcl.PointCloud()
+                    pc_2 = pcl.PointCloud()
+                    pc_1.from_array(np.hstack((points[lidar_num], intensity_0)).astype(np.float32))
+                    pc_2.from_array(np.hstack((points_ri2[lidar_num], intensity_1)).astype(np.float32))
+                    pc_path_1 = IMAGE_PATH + '/' + str(lidar_num) + '/1/' + str(frame_num).zfill(INDEX_LENGTH) + '.pcd'
+                    pc_path_2 = IMAGE_PATH + '/' + str(lidar_num) + '/2/' + str(frame_num).zfill(INDEX_LENGTH) + '.pcd'
+                    pcl.save(pc_1,pc_path_1)
+                    pcl.save(pc_2, pc_path_2)
+                """
 
                 # parse the label
-                # # context is the same for all frames in the same segment(file)
-                # context = frame.context
+
+                fp_label = open(LABEL_PATH + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.txt', 'w+')
 
                 # preprocess bounding box data
                 id_to_bbox = dict()
@@ -109,6 +173,12 @@ class Adapter:
                 frame_num += 1
                 fp_label.close()
         print("finished ...")
+
+    def extract_intensity(self, frame, range_images, lidar_num):
+        intensity_0 = np.array(range_images[lidar_num][0].data).reshape(-1,4)
+        intensity_0 = intensity_0[:,1]
+        intensity_1 = np.array(range_images[lidar_num][1].data).reshape(-1,4)[:,1]
+        return intensity_0, intensity_1
 
     def image_show(self, data, name, layout, cmap=None):
         """Show an image."""
