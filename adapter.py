@@ -5,7 +5,7 @@ import math
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
-import pcl
+# import pcl
 import progressbar
 
 from waymo_open_dataset.utils import range_image_utils
@@ -33,6 +33,8 @@ class Adapter:
     def __init__(self):
         # get all segment file name
         self.__file_names = [(DATA_PATH + i) for i in os.listdir(DATA_PATH)]
+        self.__lidar_list = ['_FRONT', '_FRONT_RIGHT', '_FRONT_LEFT', '_SIDE_RIGHT', '_SIDE_LEFT']
+        self.__type_list = ['UNKNOWN', 'VEHICLE', 'PEDESTRIAN', 'SIGN', 'CYCLIST']
 
         if not os.path.exists(KITTI_PATH):
             os.mkdir(KITTI_PATH)
@@ -42,10 +44,11 @@ class Adapter:
             for i in range(5):
                 os.mkdir(IMAGE_PATH + str(i))
 
-        self.__lidar_list = ['_FRONT', '_FRONT_RIGHT', '_FRONT_LEFT', '_SIDE_RIGHT', '_SIDE_LEFT']
-        self.__type_list = ['UNKNOWN', 'VEHICLE', 'PEDESTRIAN', 'SIGN', 'CYCLIST']
-
     def cvt(self):
+        """ convert dataset from Waymo to KITTI
+        Args:
+        return:
+        """
         bar = progressbar.ProgressBar(maxval=len(self.__file_names)+1, \
                     widgets= [progressbar.Percentage(), ' ', progressbar.Bar(marker='>',left='[',right=']'),' ', progressbar.ETA()])
         tf.enable_eager_execution()
@@ -78,6 +81,11 @@ class Adapter:
         print("\nfinished ...")
 
     def save_image(self, frame, frame_num):
+        """ parse and save the images in png format
+                :param frame: open dataset frame proto
+                :param frame_num: the current frame number
+                :return:
+        """
         for img_num in range(5):
             img_path = IMAGE_PATH + str(img_num) + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.png'
             img = cv2.imdecode(np.frombuffer(frame.images[img_num].image, np.uint8), cv2.IMREAD_COLOR)
@@ -85,6 +93,11 @@ class Adapter:
             plt.imsave(img_path, rgb_img, format='png')
 
     def save_calib(self, frame, frame_num):
+        """ parse and save the calibration data
+                :param frame: open dataset frame proto
+                :param frame_num: the current frame number
+                :return:
+        """
         fp_calib = open(CALIB_PATH + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.txt', 'w+')
 
         Tr_velo_to_cam = []
@@ -109,6 +122,11 @@ class Adapter:
         fp_calib.close()
 
     def save_lidar(self, frame, frame_num):
+        """ parse and save the lidar data in psd format
+                :param frame: open dataset frame proto
+                :param frame_num: the current frame number
+                :return:
+                """
         (range_images,
          camera_projections,
          range_image_top_pose) = self.parse_range_image_and_camera_projection(
@@ -151,7 +169,11 @@ class Adapter:
         """
 
     def save_label(self, frame, frame_num):
-
+        """ parse and save the label data in .txt format
+                :param frame: open dataset frame proto
+                :param frame_num: the current frame number
+                :return:
+                """
         fp_label = open(LABEL_PATH + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.txt', 'w+')
 
         # preprocess bounding box data
@@ -206,6 +228,12 @@ class Adapter:
         fp_label.close()
 
     def extract_intensity(self, frame, range_images, lidar_num):
+        """ extract the intensity from the original range image
+                :param frame: open dataset frame proto
+                :param frame_num: the current frame number
+                :param lidar_num: the number of current lidar
+                :return:
+                """
         intensity_0 = np.array(range_images[lidar_num][0].data).reshape(-1,4)
         intensity_0 = intensity_0[:,1]
         intensity_1 = np.array(range_images[lidar_num][1].data).reshape(-1,4)[:,1]
