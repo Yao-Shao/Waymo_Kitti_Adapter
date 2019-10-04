@@ -23,6 +23,7 @@ IMAGE_PATH = KITTI_PATH + 'image_'
 CALIB_PATH = KITTI_PATH + 'calib'
 LIDAR_PATH = KITTI_PATH + 'lidar'
 INDEX_LENGTH = 6    # max indexing length
+IMAGE_FORMAT = 'png'
 
 os.environ['PYTHONPATH'] = GLOBAL_PATH
 m = imp.find_module('waymo_open_dataset', [GLOBAL_PATH])
@@ -87,10 +88,10 @@ class Adapter:
                 :return:
         """
         for img_num in range(5):
-            img_path = IMAGE_PATH + str(img_num) + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.png'
+            img_path = IMAGE_PATH + str(img_num) + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.' + IMAGE_FORMAT
             img = cv2.imdecode(np.frombuffer(frame.images[img_num].image, np.uint8), cv2.IMREAD_COLOR)
             rgb_img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-            plt.imsave(img_path, rgb_img, format='png')
+            plt.imsave(img_path, rgb_img, format=IMAGE_FORMAT)
 
     def save_calib(self, frame, frame_num):
         """ parse and save the calibration data
@@ -132,24 +133,27 @@ class Adapter:
          range_image_top_pose) = self.parse_range_image_and_camera_projection(
             frame)
 
-        points, cp_points = self.convert_range_image_to_point_cloud(
+        points, cp_points, intensity = self.convert_range_image_to_point_cloud(
             frame,
             range_images,
             camera_projections,
             range_image_top_pose)
-        points_ri2, cp_points_ri2 = self.convert_range_image_to_point_cloud(
-            frame,
-            range_images,
-            camera_projections,
-            range_image_top_pose,
-            ri_index=1)
-
-        # 3d points in vehicle frame.
         points_all = np.concatenate(points, axis=0)
-        points_all_ri2 = np.concatenate(points_ri2, axis=0)
+        intensity_all = np.concatenate(intensity, axis=0)
+        point_cloud = np.column_stack((points_all, intensity_all))
+
+        # points_ri2, cp_points_ri2, intensity_ri2 = self.convert_range_image_to_point_cloud(
+        #     frame,
+        #     range_images,
+        #     camera_projections,
+        #     range_image_top_pose,
+        #     ri_index=1)
+        # points_all_ri2 = np.concatenate(points_ri2, axis=0)
+        # intensity_all_ri2 = np.concatenate(intensity_ri2, axis=0)
+        # point_cloud_ri2 = np.column_stack((points_all_ri2, intensity_all_ri2))
 
         pc_1 = pcl.PointCloud()
-        pc_1.from_array(points_all)
+        pc_1.from_array(point_cloud)
         pc_path_1 = LIDAR_PATH + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.pcd'
         pcl.save(pc_1, pc_path_1)
 
@@ -352,11 +356,13 @@ class Adapter:
           points: {[N, 3]} list of 3d lidar points of length 5 (number of lidars).
           cp_points: {[N, 6]} list of camera projections of length 5
             (number of lidars).
+          intensity: {[N, 1]} list of intensity of length 5 (number of lidars).
         """
         calibrations = sorted(frame.context.laser_calibrations, key=lambda c: c.name)
         lasers = sorted(frame.lasers, key=lambda laser: laser.name)
         points = []
         cp_points = []
+        intensity = []
 
         frame_pose = tf.convert_to_tensor(
             np.reshape(np.array(frame.pose.transform), [4, 4]))
@@ -403,14 +409,17 @@ class Adapter:
             range_image_cartesian = tf.squeeze(range_image_cartesian, axis=0)
             points_tensor = tf.gather_nd(range_image_cartesian,
                                          tf.where(range_image_mask))
-
+            intensity_tensor = tf.gather_nd(range_image_tensor,
+                                         tf.where(range_image_mask))
             cp = camera_projections[c.name][0]
             cp_tensor = tf.reshape(tf.convert_to_tensor(cp.data), cp.shape.dims)
             cp_points_tensor = tf.gather_nd(cp_tensor, tf.where(range_image_mask))
             points.append(points_tensor.numpy())
             cp_points.append(cp_points_tensor.numpy())
 
-        return points, cp_points
+            intensity.append(intensity_tensor.numpy()[:, 1])
+
+        return points, cp_points, intensity
 
     def rgba(self, r):
         """Generates a color based on range.
