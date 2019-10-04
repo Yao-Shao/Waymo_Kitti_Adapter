@@ -14,18 +14,21 @@ from waymo_open_dataset import dataset_pb2 as open_dataset
 
 ############Config#############################################################
 GLOBAL_PATH = '/home/cyrus/Research/Waymo_Kitti_Adapter'
+PYTHON_PATH = '/usr/bin/python3.6'
 # path to waymo dataset "folder" (all the file in that folder will be converted)
-DATA_PATH = GLOBAL_PATH + '/waymo_dataset/'
+DATA_PATH = GLOBAL_PATH + '/waymo_dataset'
 # path to save kitti dataset
-KITTI_PATH = GLOBAL_PATH + '/kitti_dataset/'
-LABEL_PATH = KITTI_PATH + 'label'
-IMAGE_PATH = KITTI_PATH + 'image_'
-CALIB_PATH = KITTI_PATH + 'calib'
-LIDAR_PATH = KITTI_PATH + 'lidar'
+KITTI_PATH = GLOBAL_PATH + '/kitti_dataset'
+
+# do not change
+LABEL_PATH = KITTI_PATH + '/label'
+IMAGE_PATH = KITTI_PATH + '/image_'
+CALIB_PATH = KITTI_PATH + '/calib'
+LIDAR_PATH = KITTI_PATH + '/lidar'
 INDEX_LENGTH = 6    # max indexing length
 IMAGE_FORMAT = 'png'
 
-os.environ['PYTHONPATH'] = GLOBAL_PATH
+os.environ['PYTHONPATH'] = PYTHON_PATH
 m = imp.find_module('waymo_open_dataset', [GLOBAL_PATH])
 imp.load_module('waymo_open_dataset', m[0], m[1], m[2])
 ###############################################################################
@@ -33,7 +36,7 @@ imp.load_module('waymo_open_dataset', m[0], m[1], m[2])
 class Adapter:
     def __init__(self):
         # get all segment file name
-        self.__file_names = [(DATA_PATH + i) for i in os.listdir(DATA_PATH)]
+        self.__file_names = [(DATA_PATH + '/' + i) for i in os.listdir(DATA_PATH)]
         self.__lidar_list = ['_FRONT', '_FRONT_RIGHT', '_FRONT_LEFT', '_SIDE_RIGHT', '_SIDE_LEFT']
         self.__type_list = ['UNKNOWN', 'VEHICLE', 'PEDESTRIAN', 'SIGN', 'CYCLIST']
 
