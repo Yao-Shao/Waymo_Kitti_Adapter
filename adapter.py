@@ -1,3 +1,5 @@
+#  bbox top and down
+# lidar projected label, may not be
 import os
 import imp
 import tensorflow as tf
@@ -65,17 +67,18 @@ class Adapter:
             for data in dataset:
                 frame = open_dataset.Frame()
                 frame.ParseFromString(bytearray(data.numpy()))
-                # save the image:
-                self.save_image(frame, frame_num)
-
-                # parse the calib
-                self.save_calib(frame, frame_num)
-
-                # parse lidar
-                self.save_lidar(frame, frame_num)
-
-                # parse label
-                self.save_label(frame, frame_num)
+                print(frame.images)
+                # # save the image:
+                # self.save_image(frame, frame_num)
+                #
+                # # parse the calib
+                # self.save_calib(frame, frame_num)
+                #
+                # # parse lidar
+                # self.save_lidar(frame, frame_num)
+                #
+                # # parse label
+                # self.save_label(frame, frame_num)
 
                 frame_num += 1
 

@@ -1,13 +1,12 @@
 import os
 import imp
-import tensorflow as tf
 import math
+# import time
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
-import pcl
+import tensorflow as tf
 import progressbar
-import pickle
 
 from waymo_open_dataset.utils import range_image_utils
 from waymo_open_dataset.utils import transform_utils
@@ -15,47 +14,48 @@ from waymo_open_dataset import dataset_pb2 as open_dataset
 
 ############Config#############################################################
 GLOBAL_PATH = '/home/cyrus/Research/Waymo_Kitti_Adapter'
-PYTHON_PATH = '/usr/bin/python3.6'
+# PYTHON_PATH = '/usr/bin/python3.6'
 # path to waymo dataset "folder" (all the file in that folder will be converted)
 DATA_PATH = GLOBAL_PATH + '/waymo_dataset'
 # path to save kitti dataset
 KITTI_PATH = GLOBAL_PATH + '/kitti_dataset'
 
+# location filter, use this to convert your preferred location
+LOCATION_FILTER = True
+LOCATION_NAME = 'location_sf'
+
 # do not change
-LABEL_PATH = KITTI_PATH + '/label'
+LABEL_PATH = KITTI_PATH + '/label_'
+LABEL_ALL_PATH = KITTI_PATH + '/label_all'
 IMAGE_PATH = KITTI_PATH + '/image_'
 CALIB_PATH = KITTI_PATH + '/calib'
 LIDAR_PATH = KITTI_PATH + '/lidar'
-INDEX_LENGTH = 6    # max indexing length
-IMAGE_FORMAT = 'png'
+INDEX_LENGTH = 15    # max indexing length
+IMAGE_FORMAT = 'jpg'
 
-os.environ['PYTHONPATH'] = PYTHON_PATH
+# os.environ['PYTHONPATH'] = PYTHON_PATH
 m = imp.find_module('waymo_open_dataset', [GLOBAL_PATH])
 imp.load_module('waymo_open_dataset', m[0], m[1], m[2])
 ###############################################################################
 
 class Adapter:
     def __init__(self):
-        # get all segment file name
         self.__file_names = [(DATA_PATH + '/' + i) for i in os.listdir(DATA_PATH)]
         self.__lidar_list = ['_FRONT', '_FRONT_RIGHT', '_FRONT_LEFT', '_SIDE_RIGHT', '_SIDE_LEFT']
         self.__type_list = ['UNKNOWN', 'VEHICLE', 'PEDESTRIAN', 'SIGN', 'CYCLIST']
 
-        if not os.path.exists(KITTI_PATH):
-            os.mkdir(KITTI_PATH)
-            os.mkdir(LABEL_PATH)
-            os.mkdir(CALIB_PATH)
-            os.mkdir(LIDAR_PATH)
-            for i in range(5):
-                os.mkdir(IMAGE_PATH + str(i))
+        self.create_folder()
 
     def cvt(self):
         """ convert dataset from Waymo to KITTI
         Args:
         return:
         """
-        bar = progressbar.ProgressBar(maxval=len(self.__file_names)+1, \
-                    widgets= [progressbar.Percentage(), ' ', progressbar.Bar(marker='>',left='[',right=']'),' ', progressbar.ETA()])
+        bar = progressbar.ProgressBar(maxval=len(self.__file_names)+1,
+                    widgets= [progressbar.Percentage(), ' ',
+                    progressbar.Bar(marker='>',left='[',right=']'),' ',
+                    progressbar.ETA()])
+
         tf.enable_eager_execution()
         file_num = 1
         frame_num = 0
@@ -66,20 +66,33 @@ class Adapter:
             for data in dataset:
                 frame = open_dataset.Frame()
                 frame.ParseFromString(bytearray(data.numpy()))
+
+                if LOCATION_FILTER == True and frame.context.stats.location != LOCATION_NAME:
+                    continue
+
                 # save the image:
+                # s1 = time.time()
                 self.save_image(frame, frame_num)
+                # e1 = time.time()
 
                 # parse the calib
+                # s2 = time.time()
                 self.save_calib(frame, frame_num)
+                # e2 = time.time()
 
                 # parse lidar
+                # s3 = time.time()
                 self.save_lidar(frame, frame_num)
+                # e3 = time.time()
 
                 # parse label
+                # s4 = time.time()
                 self.save_label(frame, frame_num)
+                # e4 = time.time()
+
+                # print("image:{}\ncalib:{}\nlidar:{}\nlabel:{}\n".format(str(s1-e1),str(s2-e2),str(s3-e3),str(s4-e4)))
 
                 frame_num += 1
-
             bar.update(file_num)
             file_num += 1
         bar.finish()
@@ -91,9 +104,9 @@ class Adapter:
                 :param frame_num: the current frame number
                 :return:
         """
-        for img_num in range(5):
-            img_path = IMAGE_PATH + str(img_num) + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.' + IMAGE_FORMAT
-            img = cv2.imdecode(np.frombuffer(frame.images[img_num].image, np.uint8), cv2.IMREAD_COLOR)
+        for img in frame.images:
+            img_path = IMAGE_PATH + str(img.name - 1) + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.' + IMAGE_FORMAT
+            img = cv2.imdecode(np.frombuffer(img.image, np.uint8), cv2.IMREAD_COLOR)
             rgb_img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
             plt.imsave(img_path, rgb_img, format=IMAGE_FORMAT)
 
@@ -132,33 +145,20 @@ class Adapter:
                 :param frame_num: the current frame number
                 :return:
                 """
-        (range_images,
-         camera_projections,
-         range_image_top_pose) = self.parse_range_image_and_camera_projection(
+        range_images, range_image_top_pose = self.parse_range_image_and_camera_projection(
             frame)
 
-        points, cp_points, intensity = self.convert_range_image_to_point_cloud(
+        points, intensity = self.convert_range_image_to_point_cloud(
             frame,
             range_images,
-            camera_projections,
             range_image_top_pose)
+
         points_all = np.concatenate(points, axis=0)
         intensity_all = np.concatenate(intensity, axis=0)
         point_cloud = np.column_stack((points_all, intensity_all))
 
-        # points_ri2, cp_points_ri2, intensity_ri2 = self.convert_range_image_to_point_cloud(
-        #     frame,
-        #     range_images,
-        #     camera_projections,
-        #     range_image_top_pose,
-        #     ri_index=1)
-        # points_all_ri2 = np.concatenate(points_ri2, axis=0)
-        # intensity_all_ri2 = np.concatenate(intensity_ri2, axis=0)
-        # point_cloud_ri2 = np.column_stack((points_all_ri2, intensity_all_ri2))
-
-        pc_path = LIDAR_PATH + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.pkl'
-        with open(pc_path, 'wb') as f:
-            pickle.dump(point_cloud, f)
+        pc_path = LIDAR_PATH + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.bin'
+        point_cloud.tofile(pc_path)
 
     def save_label(self, frame, frame_num):
         """ parse and save the label data in .txt format
@@ -166,24 +166,30 @@ class Adapter:
                 :param frame_num: the current frame number
                 :return:
                 """
-        fp_label = open(LABEL_PATH + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.txt', 'w+')
-
+        fp_label_all = open(LABEL_ALL_PATH + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.txt', 'w+')
         # preprocess bounding box data
         id_to_bbox = dict()
+        id_to_name = dict()
         for labels in frame.projected_lidar_labels:
+            name = labels.name
             for label in labels.labels:
                 bbox = [label.box.center_x - label.box.length / 2, label.box.center_y + label.box.width / 2,
                         label.box.center_x + label.box.length / 2, label.box.center_y - label.box.width / 2]
                 id_to_bbox[label.id] = bbox
+                id_to_name[label.id] = name - 1
 
         for obj in frame.laser_labels:
+
             # caculate bounding box
             bounding_box = None
+            name = None
             id = obj.id
             for lidar in self.__lidar_list:
                 if id + lidar in id_to_bbox:
                     bounding_box = id_to_bbox.get(id + lidar)
-            if bounding_box == None:
+                    name = str(id_to_name.get(id + lidar))
+                    break
+            if bounding_box == None or name == None:
                 continue
 
             my_type = self.__type_list[obj.type]
@@ -214,10 +220,29 @@ class Adapter:
                                                                                    round(y, 2),
                                                                                    round(z, 2),
                                                                                    round(rotation_y, 2))
-            # print(line)
+            line_all = line[:-1] + ' ' + name + '\n'
             # store the label
+            fp_label = open(LABEL_PATH + name + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.txt', 'a')
             fp_label.write(line)
-        fp_label.close()
+            fp_label.close()
+
+            fp_label_all.write(line_all)
+        fp_label_all.close()
+
+    def create_folder(self):
+        if not os.path.exists(KITTI_PATH):
+            os.mkdir(KITTI_PATH)
+        if not os.path.exists(CALIB_PATH):
+            os.mkdir(CALIB_PATH)
+        if not os.path.exists(LIDAR_PATH):
+            os.mkdir(LIDAR_PATH)
+        if not os.path.exists(LABEL_ALL_PATH):
+            os.mkdir(LABEL_ALL_PATH)
+        for i in range(5):
+            if not os.path.exists(IMAGE_PATH + str(i)):
+                os.mkdir(IMAGE_PATH + str(i))
+            if not os.path.exists(LABEL_PATH + str(i)):
+                os.mkdir(LABEL_PATH + str(i))
 
     def extract_intensity(self, frame, range_images, lidar_num):
         """ extract the intensity from the original range image
@@ -252,8 +277,8 @@ class Adapter:
           range_image_top_pose: range image pixel pose for top lidar.
         """
         self.__range_images = {}
-        camera_projections = {}
-        range_image_top_pose = None
+        # camera_projections = {}
+        # range_image_top_pose = None
         for laser in frame.lasers:
             if len(laser.ri_return1.range_image_compressed) > 0:
                 range_image_str_tensor = tf.decode_compressed(
@@ -269,24 +294,24 @@ class Adapter:
                     range_image_top_pose.ParseFromString(
                         bytearray(range_image_top_pose_str_tensor.numpy()))
 
-                camera_projection_str_tensor = tf.decode_compressed(
-                    laser.ri_return1.camera_projection_compressed, 'ZLIB')
-                cp = open_dataset.MatrixInt32()
-                cp.ParseFromString(bytearray(camera_projection_str_tensor.numpy()))
-                camera_projections[laser.name] = [cp]
+                # camera_projection_str_tensor = tf.decode_compressed(
+                #     laser.ri_return1.camera_projection_compressed, 'ZLIB')
+                # cp = open_dataset.MatrixInt32()
+                # cp.ParseFromString(bytearray(camera_projection_str_tensor.numpy()))
+                # camera_projections[laser.name] = [cp]
             if len(laser.ri_return2.range_image_compressed) > 0:
                 range_image_str_tensor = tf.decode_compressed(
                     laser.ri_return2.range_image_compressed, 'ZLIB')
                 ri = open_dataset.MatrixFloat()
                 ri.ParseFromString(bytearray(range_image_str_tensor.numpy()))
                 self.__range_images[laser.name].append(ri)
-
-                camera_projection_str_tensor = tf.decode_compressed(
-                    laser.ri_return2.camera_projection_compressed, 'ZLIB')
-                cp = open_dataset.MatrixInt32()
-                cp.ParseFromString(bytearray(camera_projection_str_tensor.numpy()))
-                camera_projections[laser.name].append(cp)
-        return self.__range_images, camera_projections, range_image_top_pose
+                #
+                # camera_projection_str_tensor = tf.decode_compressed(
+                #     laser.ri_return2.camera_projection_compressed, 'ZLIB')
+                # cp = open_dataset.MatrixInt32()
+                # cp.ParseFromString(bytearray(camera_projection_str_tensor.numpy()))
+                # camera_projections[laser.name].append(cp)
+        return self.__range_images, range_image_top_pose
 
     def plot_range_image_helper(self, data, name, layout, vmin=0, vmax=1, cmap='gray'):
         """Plots range image.
@@ -329,7 +354,7 @@ class Adapter:
         self.plot_range_image_helper(range_image_elongation.numpy(), 'elongation',
                                 [8, 1, layout_index_start + 2], vmax=1.5, cmap='gray')
 
-    def convert_range_image_to_point_cloud(self, frame, range_images, camera_projections, range_image_top_pose, ri_index=0):
+    def convert_range_image_to_point_cloud(self, frame, range_images, range_image_top_pose, ri_index=0):
         """Convert range images to point cloud.
         Args:
           frame: open dataset frame
@@ -347,9 +372,9 @@ class Adapter:
           intensity: {[N, 1]} list of intensity of length 5 (number of lidars).
         """
         calibrations = sorted(frame.context.laser_calibrations, key=lambda c: c.name)
-        lasers = sorted(frame.lasers, key=lambda laser: laser.name)
+        # lasers = sorted(frame.lasers, key=lambda laser: laser.name)
         points = []
-        cp_points = []
+        # cp_points = []
         intensity = []
 
         frame_pose = tf.convert_to_tensor(
@@ -399,15 +424,14 @@ class Adapter:
                                          tf.where(range_image_mask))
             intensity_tensor = tf.gather_nd(range_image_tensor,
                                          tf.where(range_image_mask))
-            cp = camera_projections[c.name][0]
-            cp_tensor = tf.reshape(tf.convert_to_tensor(cp.data), cp.shape.dims)
-            cp_points_tensor = tf.gather_nd(cp_tensor, tf.where(range_image_mask))
+            # cp = camera_projections[c.name][0]
+            # cp_tensor = tf.reshape(tf.convert_to_tensor(cp.data), cp.shape.dims)
+            # cp_points_tensor = tf.gather_nd(cp_tensor, tf.where(range_image_mask))
             points.append(points_tensor.numpy())
-            cp_points.append(cp_points_tensor.numpy())
-
+            # cp_points.append(cp_points_tensor.numpy())
             intensity.append(intensity_tensor.numpy()[:, 1])
 
-        return points, cp_points, intensity
+        return points, intensity
 
     def rgba(self, r):
         """Generates a color based on range.
