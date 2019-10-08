@@ -20,7 +20,7 @@ DATA_PATH = GLOBAL_PATH + '/waymo_dataset'
 KITTI_PATH = GLOBAL_PATH + '/kitti_dataset'
 # location filter, use this to convert your preferred location
 LOCATION_FILTER = True
-LOCATION_NAME = 'location_sf'
+LOCATION_NAME = ['location_sf']
 # max indexing length
 INDEX_LENGTH = 15
 IMAGE_FORMAT = 'jpg'
@@ -63,7 +63,7 @@ class Adapter:
                 frame = open_dataset.Frame()
                 frame.ParseFromString(bytearray(data.numpy()))
 
-                if LOCATION_FILTER == True and frame.context.stats.location != LOCATION_NAME:
+                if LOCATION_FILTER == True and frame.context.stats.location not in LOCATION_NAME:
                     continue
 
                 # save the image:
