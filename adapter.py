@@ -228,7 +228,7 @@ class Adapter:
     def get_file_names(self):
         self.__file_names = []
         for i in os.listdir(DATA_PATH):
-            if i.split('.')[-1] == 'tfrecords':
+            if i.split('.')[-1] == 'tfrecord':
                 self.__file_names.append(DATA_PATH + '/' + i)
 
     def create_folder(self):
