@@ -12,7 +12,7 @@ from waymo_open_dataset.utils import range_image_utils
 from waymo_open_dataset.utils import transform_utils
 from waymo_open_dataset import dataset_pb2 as open_dataset
 
-############Config#############################################################
+############################Config###########################################
 GLOBAL_PATH = '/home/cyrus/Research/Waymo_Kitti_Adapter'
 # path to waymo dataset "folder" (all the file in that folder will be converted)
 DATA_PATH = GLOBAL_PATH + '/waymo_dataset'
@@ -62,7 +62,6 @@ class Adapter:
             for data in dataset:
                 frame = open_dataset.Frame()
                 frame.ParseFromString(bytearray(data.numpy()))
-
                 if LOCATION_FILTER == True and frame.context.stats.location != LOCATION_NAME:
                     continue
 
@@ -228,6 +227,7 @@ class Adapter:
     def get_file_names(self):
         self.__file_names = []
         for i in os.listdir(DATA_PATH):
+            print(i)
             if i.split('.')[-1] == 'tfrecords':
                 self.__file_names.append(DATA_PATH + '/' + i)
 
