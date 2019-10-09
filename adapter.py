@@ -115,12 +115,15 @@ class Adapter:
         fp_calib = open(CALIB_PATH + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.txt', 'w+')
 
         Tr_velo_to_cam = []
+        Tr_imu_to_velo = []
         for laser in frame.context.laser_calibrations:
-            Tr_velo_to_cam.append(["%e" % i for i in laser.extrinsic.transform])
+            tmp = [laser.extrinsic.transform[0],0,laser.extrinsic.transform[2],0,laser.extrinsic.transform[1],laser.extrinsic.transform[3],0,0,1]
+            Tr_velo_to_cam.append(tmp)
+            
         camera_calib = []
         for cam in frame.context.camera_calibrations:
             camera_calib.append(["%e" % i for i in cam.intrinsic])
-        Tr_imu_to_velo = ['%e' % (0.0) for i in range(12)]
+        
 
         R0_rect = ["%e" % i for i in np.eye(4).flatten()[:12]]
         calib_context = "P0: " + " ".join(camera_calib[0]) + '\n' + "P1: " + " ".join(
