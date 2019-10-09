@@ -20,7 +20,7 @@ DATA_PATH = GLOBAL_PATH + '/waymo_dataset'
 KITTI_PATH = GLOBAL_PATH + '/kitti_dataset'
 # location filter, use this to convert your preferred location
 LOCATION_FILTER = True
-LOCATION_NAME = 'location_sf'
+LOCATION_NAME = ['location_sf']
 # max indexing length
 INDEX_LENGTH = 15
 IMAGE_FORMAT = 'jpg'
@@ -62,7 +62,7 @@ class Adapter:
             for data in dataset:
                 frame = open_dataset.Frame()
                 frame.ParseFromString(bytearray(data.numpy()))
-                if LOCATION_FILTER == True and frame.context.stats.location != LOCATION_NAME:
+                if LOCATION_FILTER == True and frame.context.stats.location not in LOCATION_NAME:
                     continue
 
                 # save the image:
@@ -113,24 +113,27 @@ class Adapter:
         """
         fp_calib = open(CALIB_PATH + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.txt', 'w+')
 
+        camera_calib = []
+        R0_rect = []
         Tr_velo_to_cam = []
+        calib_context = ''
+
         for laser in frame.context.laser_calibrations:
             Tr_velo_to_cam.append(["%e" % i for i in laser.extrinsic.transform])
-        camera_calib = []
-        for cam in frame.context.camera_calibrations:
-            camera_calib.append(["%e" % i for i in cam.intrinsic])
-        Tr_imu_to_velo = ['%e' % (0.0) for i in range(12)]
 
-        R0_rect = ["%e" % i for i in np.eye(4).flatten()[:12]]
-        calib_context = "P0: " + " ".join(camera_calib[0]) + '\n' + "P1: " + " ".join(
-            camera_calib[1]) + '\n' "P2: " + " ".join(camera_calib[2]) + '\n' "P3: " + " ".join(
-            camera_calib[3]) + '\n' "P4: " + " ".join(camera_calib[4]) + '\n'
-        calib_context += "R0_rect: " + " ".join(R0_rect) + '\n'
-        calib_context += "Tr_velo_to_cam_0: " + " ".join(Tr_velo_to_cam[0]) + '\n' + "Tr_velo_to_cam_1: " + " ".join(
-            Tr_velo_to_cam[1]) + '\n' + "Tr_velo_to_cam_2: " + " ".join(
-            Tr_velo_to_cam[2]) + '\n' + "Tr_velo_to_cam_3: " + " ".join(
-            Tr_velo_to_cam[3]) + '\n' + "Tr_velo_to_cam_4: " + " ".join(Tr_velo_to_cam[4]) + '\n'
-        calib_context += "Tr_imu_to_velo: " + " ".join(Tr_imu_to_velo)
+        for cam in frame.context.camera_calibrations:
+            tmp = [cam.intrinsic[0], 0, cam.intrinsic[2], 0, cam.intrinsic[1],
+                   cam.intrinsic[3], 0, 0, 1]
+            tmp = ["%e" % i for i in tmp]
+            camera_calib.append(tmp)
+
+            R0_rect.append("%e" % i for i in np.eye(3).flatten())
+        for i in range(5):
+            calib_context += "P" + str(i) + ": " + " ".join(camera_calib[0]) + '\n'
+        for i in range(5):
+            calib_context += "R0_rect_" + str(i) + ": " + " ".join(R0_rect[i]) + '\n'
+        for i in range(5):
+            calib_context += "Tr_velo_to_cam_" + str(i) + ": " + " ".join(Tr_velo_to_cam[i]) + '\n'
         fp_calib.write(calib_context)
         fp_calib.close()
 
@@ -227,8 +230,7 @@ class Adapter:
     def get_file_names(self):
         self.__file_names = []
         for i in os.listdir(DATA_PATH):
-            print(i)
-            if i.split('.')[-1] == 'tfrecords':
+            if i.split('.')[-1] == 'tfrecord':
                 self.__file_names.append(DATA_PATH + '/' + i)
 
     def create_folder(self):
