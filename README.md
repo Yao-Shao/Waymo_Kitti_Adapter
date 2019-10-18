@@ -81,8 +81,8 @@ For each frame, here is the data specification:
    3    dimensions   3D object dimensions: height, width, length (in meters)
    3    location     3D object location x,y,z in camera coordinates (in meters)
    1    rotation_y   Rotation ry around Y-axis in camera coordinates [-pi..pi]
-   1   	camera_num	 only exist in label_all, the camera number which the object 
-   					belongs to  
+   1    camera_num	the camera number which the object belongs to, only exist 
+                     in label_all   
 ```
 
 ### Calib
