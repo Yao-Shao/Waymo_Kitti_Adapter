@@ -1,3 +1,4 @@
+import sys
 import os
 import imp
 import math
@@ -15,9 +16,9 @@ from waymo_open_dataset import dataset_pb2 as open_dataset
 ############################Config###########################################
 GLOBAL_PATH = '/home/cyrus/Research/Waymo_Kitti_Adapter'
 # path to waymo dataset "folder" (all the file in that folder will be converted)
-DATA_PATH = GLOBAL_PATH + '/waymo_dataset'
+DATA_PATH = '/media/yiyang/300CC2CF0CC28F72/training_0012'
 # path to save kitti dataset
-KITTI_PATH = GLOBAL_PATH + '/kitti_dataset'
+KITTI_PATH = '/media/yiyang/300CC2CF0CC28F72/training_0012_new'
 # location filter, use this to convert your preferred location
 LOCATION_FILTER = True
 LOCATION_NAME = ['location_sf']
@@ -30,8 +31,8 @@ LABEL_ALL_PATH = KITTI_PATH + '/label_all'
 IMAGE_PATH = KITTI_PATH + '/image_'
 CALIB_PATH = KITTI_PATH + '/calib'
 LIDAR_PATH = KITTI_PATH + '/lidar'
-m = imp.find_module('waymo_open_dataset', [GLOBAL_PATH])
-imp.load_module('waymo_open_dataset', m[0], m[1], m[2])
+#m = imp.find_module('waymo_open_dataset', [GLOBAL_PATH])
+#imp.load_module('waymo_open_dataset', m[0], m[1], m[2])
 ###############################################################################
 
 class Adapter:
@@ -112,26 +113,34 @@ class Adapter:
                 :return:
         """
         fp_calib = open(CALIB_PATH + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.txt', 'w+')
-
+        waymo_cam_RT=np.array([0,-1,0,0,  0,0,-1,0,   1,0,0,0,    0 ,0 ,0 ,1]).reshape(4,4)
         camera_calib = []
         R0_rect = []
         Tr_velo_to_cam = []
         calib_context = ''
 
-        for laser in frame.context.laser_calibrations:
-            Tr_velo_to_cam.append(["%e" % i for i in laser.extrinsic.transform])
+        for camera in frame.context.camera_calibrations:
+            tmp=np.array(camera.extrinsic.transform).reshape(4,4)
+            tmp=np.linalg.inv(tmp).reshape((16,))
+            Tr_velo_to_cam.append(["%e" % i for i in tmp])
 
         for cam in frame.context.camera_calibrations:
-            tmp = [cam.intrinsic[0], 0, cam.intrinsic[2], 0, cam.intrinsic[1],
-                   cam.intrinsic[3], 0, 0, 1]
+            tmp=np.zeros((3,4))
+            tmp[0,0]=cam.intrinsic[0]
+            tmp[1,1]=cam.intrinsic[1]
+            tmp[0,2]=cam.intrinsic[2]
+            tmp[1,2]=cam.intrinsic[3]
+            tmp[2,2]=1
+            tmp=(tmp @ waymo_cam_RT)
+            tmp=list(tmp.reshape(12))
             tmp = ["%e" % i for i in tmp]
             camera_calib.append(tmp)
 
             R0_rect.append("%e" % i for i in np.eye(3).flatten())
+
         for i in range(5):
-            calib_context += "P" + str(i) + ": " + " ".join(camera_calib[0]) + '\n'
-        for i in range(5):
-            calib_context += "R0_rect_" + str(i) + ": " + " ".join(R0_rect[i]) + '\n'
+            calib_context += "P" + str(i) + ": " + " ".join(camera_calib[i]) + '\n'
+        calib_context += "R0_rect_0" + ": " + " ".join(R0_rect[i]) + '\n'
         for i in range(5):
             calib_context += "Tr_velo_to_cam_" + str(i) + ": " + " ".join(Tr_velo_to_cam[i]) + '\n'
         fp_calib.write(calib_context)
@@ -171,8 +180,8 @@ class Adapter:
         for labels in frame.projected_lidar_labels:
             name = labels.name
             for label in labels.labels:
-                bbox = [label.box.center_x - label.box.length / 2, label.box.center_y + label.box.width / 2,
-                        label.box.center_x + label.box.length / 2, label.box.center_y - label.box.width / 2]
+                bbox = [label.box.center_x - label.box.length / 2, label.box.center_y - label.box.width / 2,
+                        label.box.center_x + label.box.length / 2, label.box.center_y + label.box.width / 2]
                 id_to_bbox[label.id] = bbox
                 id_to_name[label.id] = name - 1
 
