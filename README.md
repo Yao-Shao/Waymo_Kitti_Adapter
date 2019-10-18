@@ -107,7 +107,7 @@ Point cloud in vehicle frame.
 x y z intensity
 ```
 
-For more details, see [readme.txt](https://github.com/waymo-research/waymo-open-dataset/KITTI/readme.txt) by KITTI.
+For more details, see [readme.txt](https://github.com/Yao-Shao/Waymo_Kitti_Adapter/blob/master/KITTI/readme.txt) by KITTI.
 
 ## References
 
