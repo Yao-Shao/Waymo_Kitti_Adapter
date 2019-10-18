@@ -88,9 +88,9 @@ For each frame, here is the data specification:
 ### Calib
 
 ```
-P0-P4 : intrinsic matrix for each cameral
+P0-P4 : intrinsic matrix for each camera
 R0_rect : rectify matrix
-Tr_velo_to_cam_0 - Tr_velo_to_cam_4 : transformation matrix from vehicle frame to cameral frame
+Tr_velo_to_cam_0 - Tr_velo_to_cam_4 : transformation matrix from vehicle frame to camera frame
 ```
 
 ### Image
@@ -107,7 +107,7 @@ Point cloud in vehicle frame.
 x y z intensity
 ```
 
-For more details, see [readme.txt](https://github.com/waymo-research/waymo-open-dataset/readme.txt) by KITTI.
+For more details, see [readme.txt](https://github.com/waymo-research/waymo-open-dataset/KITTI/readme.txt) by KITTI.
 
 ## References
 
