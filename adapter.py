@@ -1,6 +1,4 @@
-import sys
 import os
-import imp
 import math
 # import time
 import numpy as np
@@ -16,9 +14,9 @@ from waymo_open_dataset import dataset_pb2 as open_dataset
 ############################Config###########################################
 GLOBAL_PATH = '/home/cyrus/Research/Waymo_Kitti_Adapter'
 # path to waymo dataset "folder" (all the file in that folder will be converted)
-DATA_PATH = '/media/yiyang/300CC2CF0CC28F72/training_0012'
+DATA_PATH = '/home/cyrus/Research/Waymo_Kitti_Adapter/waymo_dataset'
 # path to save kitti dataset
-KITTI_PATH = '/media/yiyang/300CC2CF0CC28F72/training_0012_new'
+KITTI_PATH = '/home/cyrus/Research/Waymo_Kitti_Adapter/kitti_dataset'
 # location filter, use this to convert your preferred location
 LOCATION_FILTER = True
 LOCATION_NAME = ['location_sf']
@@ -31,8 +29,6 @@ LABEL_ALL_PATH = KITTI_PATH + '/label_all'
 IMAGE_PATH = KITTI_PATH + '/image_'
 CALIB_PATH = KITTI_PATH + '/calib'
 LIDAR_PATH = KITTI_PATH + '/lidar'
-#m = imp.find_module('waymo_open_dataset', [GLOBAL_PATH])
-#imp.load_module('waymo_open_dataset', m[0], m[1], m[2])
 ###############################################################################
 
 class Adapter:
@@ -115,7 +111,7 @@ class Adapter:
         fp_calib = open(CALIB_PATH + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.txt', 'w+')
         waymo_cam_RT=np.array([0,-1,0,0,  0,0,-1,0,   1,0,0,0,    0 ,0 ,0 ,1]).reshape(4,4)
         camera_calib = []
-        R0_rect = []
+        R0_rect = ["%e" % i for i in np.eye(3).flatten()]
         Tr_velo_to_cam = []
         calib_context = ''
 
@@ -136,11 +132,9 @@ class Adapter:
             tmp = ["%e" % i for i in tmp]
             camera_calib.append(tmp)
 
-            R0_rect.append("%e" % i for i in np.eye(3).flatten())
-
         for i in range(5):
             calib_context += "P" + str(i) + ": " + " ".join(camera_calib[i]) + '\n'
-        calib_context += "R0_rect_0" + ": " + " ".join(R0_rect[i]) + '\n'
+        calib_context += "R0_rect" + ": " + " ".join(R0_rect) + '\n'
         for i in range(5):
             calib_context += "Tr_velo_to_cam_" + str(i) + ": " + " ".join(Tr_velo_to_cam[i]) + '\n'
         fp_calib.write(calib_context)
