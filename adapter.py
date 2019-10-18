@@ -12,8 +12,7 @@ from waymo_open_dataset.utils import transform_utils
 from waymo_open_dataset import dataset_pb2 as open_dataset
 
 ############################Config###########################################
-GLOBAL_PATH = '/home/cyrus/Research/Waymo_Kitti_Adapter'
-# path to waymo dataset "folder" (all the file in that folder will be converted)
+# path to waymo dataset "folder" (all .tfrecord files in that folder will be converted)
 DATA_PATH = '/home/cyrus/Research/Waymo_Kitti_Adapter/waymo_dataset'
 # path to save kitti dataset
 KITTI_PATH = '/home/cyrus/Research/Waymo_Kitti_Adapter/kitti_dataset'
@@ -22,6 +21,7 @@ LOCATION_FILTER = True
 LOCATION_NAME = ['location_sf']
 # max indexing length
 INDEX_LENGTH = 15
+# as name
 IMAGE_FORMAT = 'jpg'
 # do not change
 LABEL_PATH = KITTI_PATH + '/label_'

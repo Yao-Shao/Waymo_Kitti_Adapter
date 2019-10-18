@@ -40,6 +40,76 @@ This is a tool converting [Waymo open dataset](https://waymo.com/open/) format t
 
 4. Run adapter.py.
 
+## Data specification
+
+### Cameras
+
+Waymo dataset contains five cameras:
+
+``` 
+FRONT = 0;
+FRONT_LEFT = 1;
+FRONT_RIGHT = 2;
+SIDE_LEFT = 3;
+SIDE_RIGHT = 4;
+```
+
+all the names below with post-fix 0-4 is corresponding to these five cameras.  
+
+### Label
+
+label_0 to label_4 contains label data for each camera and label_all fonder contain all the labels.
+
+All in vehicle frame.
+
+For each frame, here is the data specification:
+
+```
+#Values    Name      Description
+----------------------------------------------------------------------------
+   1    type         Describes the type of object: 'Car', 'Van', 'Truck',
+                     'Pedestrian', 'Person_sitting', 'Cyclist', 'Tram',
+                     'Misc' or 'DontCare'
+   1    truncated    Float from 0 (non-truncated) to 1 (truncated), where
+                     truncated refers to the object leaving image boundaries
+   1    occluded     Integer (0,1,2,3) indicating occlusion state:
+                     0 = fully visible, 1 = partly occluded
+                     2 = largely occluded, 3 = unknown
+   1    alpha        Observation angle of object, ranging [-pi..pi]
+   4    bbox         2D bounding box of object in the image (0-based index):
+                     contains left, top, right, bottom pixel coordinates
+   3    dimensions   3D object dimensions: height, width, length (in meters)
+   3    location     3D object location x,y,z in camera coordinates (in meters)
+   1    rotation_y   Rotation ry around Y-axis in camera coordinates [-pi..pi]
+   1   	camera_num	 only exist in label_all, the camera number which the object 
+   					belongs to  
+```
+
+### Calib
+
+```
+P0-P4 : intrinsic matrix for each cameral
+R0_rect : rectify matrix
+Tr_velo_to_cam_0 - Tr_velo_to_cam_4 : transformation matrix from vehicle frame to cameral frame
+```
+
+### Image
+
+```
+image_0 - image_4 : images for each 
+```
+
+### Lidar
+
+Point cloud in vehicle frame.
+
+```
+x y z intensity
+```
+
+For more details, see [readme.txt](https://github.com/waymo-research/waymo-open-dataset/readme.txt) by KITTI.
+
 ## References
+
 1. [Waymo open dataset](https://github.com/waymo-research/waymo-open-dataset)
 2. [argoverse kitti adapter](https://github.com/yzhou377/argoverse-kitti-adapter)
