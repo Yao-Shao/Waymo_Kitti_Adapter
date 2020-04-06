@@ -24,7 +24,8 @@ NUM_PROC = 4
 LOCATION_FILTER = True
 LOCATION_NAME = ['location_sf']
 # max indexing length
-INDEX_LENGTH = 15
+FILE_INDEX_LENGTH = 5
+FRAME_INDEX_LENGTH = 10
 # as name
 IMAGE_FORMAT = 'jpg'
 # do not change
@@ -35,6 +36,7 @@ CALIB_PATH = KITTI_PATH + '/calib'
 LIDAR_PATH = KITTI_PATH + '/lidar'
 ###############################################################################
 
+
 class Adapter:
     def __init__(self):
         self.__lidar_list = ['_FRONT', '_FRONT_RIGHT', '_FRONT_LEFT', '_SIDE_RIGHT', '_SIDE_LEFT']
@@ -43,10 +45,11 @@ class Adapter:
         self.get_file_names()
         self.create_folder()
 
-    def cvt_one(self, frame_num):
+    def cvt_one(self, file_num):
 
-        file_name = self.__file_names[frame_num]
+        file_name = self.__file_names[file_num]
         dataset = tf.data.TFRecordDataset(file_name, compression_type='')
+        frame_num = 0
         for data in dataset:
             frame = open_dataset.Frame()
             frame.ParseFromString(bytearray(data.numpy()))
@@ -55,27 +58,28 @@ class Adapter:
 
             # save the image:
             # s1 = time.time()
-            self.save_image(frame, frame_num)
+            self.save_image(frame, file_num, frame_num)
             # e1 = time.time()
 
             # parse the calib
             # s2 = time.time()
-            self.save_calib(frame, frame_num)
+            self.save_calib(frame, file_num, frame_num)
             # e2 = time.time()
 
             # parse lidar
             # s3 = time.time()
-            self.save_lidar(frame, frame_num)
+            self.save_lidar(frame, file_num, frame_num)
             # e3 = time.time()
 
             # parse label
             # s4 = time.time()
-            self.save_label(frame, frame_num)
+            self.save_label(frame, file_num, frame_num)
             # e4 = time.time()
 
+            frame_num += 1
             # print("image:{}\ncalib:{}\nlidar:{}\nlabel:{}\n".format(str(s1-e1),str(s2-e2),str(s3-e3),str(s4-e4)))
             #print('done', file_name)
-
+            
     def cvt(self):
         """ convert dataset from Waymo to KITTI
         Args:
@@ -90,25 +94,27 @@ class Adapter:
       	    r = list(tqdm.tqdm(p.imap(self.cvt_one, range(len(self.__file_names))), total=len(self.__file_names)))
         print("\nfinished ...")
 
-    def save_image(self, frame, frame_num):
+    def save_image(self, frame, file_num, frame_num):
         """ parse and save the images in png format
                 :param frame: open dataset frame proto
+                :param file_num: the current file number
                 :param frame_num: the current frame number
                 :return:
         """
         for img in frame.images:
-            img_path = IMAGE_PATH + str(img.name - 1) + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.' + IMAGE_FORMAT
+            img_path = IMAGE_PATH + str(img.name - 1) + '/' + str(file_num).zfill(FILE_INDEX_LENGTH) + str(frame_num).zfill(FRAME_INDEX_LENGTH) + '.' + IMAGE_FORMAT
             img = cv2.imdecode(np.frombuffer(img.image, np.uint8), cv2.IMREAD_COLOR)
             rgb_img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
             plt.imsave(img_path, rgb_img, format=IMAGE_FORMAT)
 
-    def save_calib(self, frame, frame_num):
+    def save_calib(self, frame, file_num, frame_num):
         """ parse and save the calibration data
                 :param frame: open dataset frame proto
+                :param file_num: the current file number
                 :param frame_num: the current frame number
                 :return:
         """
-        fp_calib = open(CALIB_PATH + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.txt', 'w+')
+        fp_calib = open(CALIB_PATH + '/' + str(file_num).zfill(FILE_INDEX_LENGTH) + str(frame_num).zfill(FRAME_INDEX_LENGTH) + '.txt', 'w+')
         waymo_cam_RT=np.array([0,-1,0,0,  0,0,-1,0,   1,0,0,0,    0 ,0 ,0 ,1]).reshape(4,4)
         camera_calib = []
         R0_rect = ["%e" % i for i in np.eye(3).flatten()]
@@ -140,9 +146,10 @@ class Adapter:
         fp_calib.write(calib_context)
         fp_calib.close()
 
-    def save_lidar(self, frame, frame_num):
+    def save_lidar(self, frame, file_num, frame_num):
         """ parse and save the lidar data in psd format
                 :param frame: open dataset frame proto
+                :param file_num: the current file number
                 :param frame_num: the current frame number
                 :return:
                 """
@@ -158,16 +165,17 @@ class Adapter:
         intensity_all = np.concatenate(intensity, axis=0)
         point_cloud = np.column_stack((points_all, intensity_all))
 
-        pc_path = LIDAR_PATH + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.bin'
+        pc_path = LIDAR_PATH + '/' + str(file_num).zfill(FILE_INDEX_LENGTH) + str(frame_num).zfill(FRAME_INDEX_LENGTH) + '.bin'
         point_cloud.tofile(pc_path)
 
-    def save_label(self, frame, frame_num):
+    def save_label(self, frame, file_num, frame_num):
         """ parse and save the label data in .txt format
                 :param frame: open dataset frame proto
+                :param file_num: the current file number
                 :param frame_num: the current frame number
                 :return:
                 """
-        fp_label_all = open(LABEL_ALL_PATH + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.txt', 'w+')
+        fp_label_all = open(LABEL_ALL_PATH + '/' + str(file_num).zfill(FILE_INDEX_LENGTH) + str(frame_num).zfill(FRAME_INDEX_LENGTH) + '.txt', 'w+')
         # preprocess bounding box data
         id_to_bbox = dict()
         id_to_name = dict()
@@ -223,7 +231,7 @@ class Adapter:
                                                                                    round(rotation_y, 2))
             line_all = line[:-1] + ' ' + name + '\n'
             # store the label
-            fp_label = open(LABEL_PATH + name + '/' + str(frame_num).zfill(INDEX_LENGTH) + '.txt', 'a')
+            fp_label = open(LABEL_PATH + name + '/' + str(file_num).zfill(FILE_INDEX_LENGTH) + str(frame_num).zfill(FRAME_INDEX_LENGTH) + '.txt', 'a')
             fp_label.write(line)
             fp_label.close()
 
@@ -235,6 +243,7 @@ class Adapter:
         for i in os.listdir(DATA_PATH):
             if i.split('.')[-1] == 'tfrecord':
                 self.__file_names.append(DATA_PATH + '/' + i)
+        self.__file_names = sorted(self.__file_names)
 
     def create_folder(self):
         if not os.path.exists(KITTI_PATH):
