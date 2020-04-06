@@ -1,11 +1,13 @@
 import os
 import math
-# import time
+import time
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 import tensorflow as tf
-import progressbar
+# import progressbar
+import tqdm
+from multiprocessing import Pool
 
 from waymo_open_dataset.utils import range_image_utils
 from waymo_open_dataset.utils import transform_utils
@@ -16,6 +18,8 @@ from waymo_open_dataset import dataset_pb2 as open_dataset
 DATA_PATH = '/home/cyrus/Research/Waymo_Kitti_Adapter/waymo_dataset'
 # path to save kitti dataset
 KITTI_PATH = '/home/cyrus/Research/Waymo_Kitti_Adapter/kitti_dataset'
+# number of processes
+NUM_PROC = 4
 # location filter, use this to convert your preferred location
 LOCATION_FILTER = True
 LOCATION_NAME = ['location_sf']
@@ -39,55 +43,51 @@ class Adapter:
         self.get_file_names()
         self.create_folder()
 
+    def cvt_one(self, frame_num):
+
+        file_name = self.__file_names[frame_num]
+        dataset = tf.data.TFRecordDataset(file_name, compression_type='')
+        for data in dataset:
+            frame = open_dataset.Frame()
+            frame.ParseFromString(bytearray(data.numpy()))
+            if LOCATION_FILTER == True and frame.context.stats.location not in LOCATION_NAME:
+                continue
+
+            # save the image:
+            # s1 = time.time()
+            self.save_image(frame, frame_num)
+            # e1 = time.time()
+
+            # parse the calib
+            # s2 = time.time()
+            self.save_calib(frame, frame_num)
+            # e2 = time.time()
+
+            # parse lidar
+            # s3 = time.time()
+            self.save_lidar(frame, frame_num)
+            # e3 = time.time()
+
+            # parse label
+            # s4 = time.time()
+            self.save_label(frame, frame_num)
+            # e4 = time.time()
+
+            # print("image:{}\ncalib:{}\nlidar:{}\nlabel:{}\n".format(str(s1-e1),str(s2-e2),str(s3-e3),str(s4-e4)))
+            #print('done', file_name)
+
     def cvt(self):
         """ convert dataset from Waymo to KITTI
         Args:
         return:
         """
-        bar = progressbar.ProgressBar(maxval=len(self.__file_names)+1,
-                    widgets= [progressbar.Percentage(), ' ',
-                    progressbar.Bar(marker='>',left='[',right=']'),' ',
-                    progressbar.ETA()])
+        # turn on eager execution for older tensorflow versions
+        if int(tf.__version__.split('.')[0]) < 2:
+            tf.enable_eager_execution()
 
-        tf.enable_eager_execution()
-        file_num = 1
-        frame_num = 0
         print("start converting ...")
-        bar.start()
-        for file_name in self.__file_names:
-            dataset = tf.data.TFRecordDataset(file_name, compression_type='')
-            for data in dataset:
-                frame = open_dataset.Frame()
-                frame.ParseFromString(bytearray(data.numpy()))
-                if LOCATION_FILTER == True and frame.context.stats.location not in LOCATION_NAME:
-                    continue
-
-                # save the image:
-                # s1 = time.time()
-                self.save_image(frame, frame_num)
-                # e1 = time.time()
-
-                # parse the calib
-                # s2 = time.time()
-                self.save_calib(frame, frame_num)
-                # e2 = time.time()
-
-                # parse lidar
-                # s3 = time.time()
-                self.save_lidar(frame, frame_num)
-                # e3 = time.time()
-
-                # parse label
-                # s4 = time.time()
-                self.save_label(frame, frame_num)
-                # e4 = time.time()
-
-                # print("image:{}\ncalib:{}\nlidar:{}\nlabel:{}\n".format(str(s1-e1),str(s2-e2),str(s3-e3),str(s4-e4)))
-
-                frame_num += 1
-            bar.update(file_num)
-            file_num += 1
-        bar.finish()
+        with Pool(NUM_PROC) as p:
+      	    r = list(tqdm.tqdm(p.imap(self.cvt_one, range(len(self.__file_names))), total=len(self.__file_names)))
         print("\nfinished ...")
 
     def save_image(self, frame, frame_num):
@@ -288,32 +288,32 @@ class Adapter:
         # range_image_top_pose = None
         for laser in frame.lasers:
             if len(laser.ri_return1.range_image_compressed) > 0:
-                range_image_str_tensor = tf.decode_compressed(
+                range_image_str_tensor = tf.io.decode_compressed(
                     laser.ri_return1.range_image_compressed, 'ZLIB')
                 ri = open_dataset.MatrixFloat()
                 ri.ParseFromString(bytearray(range_image_str_tensor.numpy()))
                 self.__range_images[laser.name] = [ri]
 
                 if laser.name == open_dataset.LaserName.TOP:
-                    range_image_top_pose_str_tensor = tf.decode_compressed(
+                    range_image_top_pose_str_tensor = tf.io.decode_compressed(
                         laser.ri_return1.range_image_pose_compressed, 'ZLIB')
                     range_image_top_pose = open_dataset.MatrixFloat()
                     range_image_top_pose.ParseFromString(
                         bytearray(range_image_top_pose_str_tensor.numpy()))
 
-                # camera_projection_str_tensor = tf.decode_compressed(
+                # camera_projection_str_tensor = tf.io.decode_compressed(
                 #     laser.ri_return1.camera_projection_compressed, 'ZLIB')
                 # cp = open_dataset.MatrixInt32()
                 # cp.ParseFromString(bytearray(camera_projection_str_tensor.numpy()))
                 # camera_projections[laser.name] = [cp]
             if len(laser.ri_return2.range_image_compressed) > 0:
-                range_image_str_tensor = tf.decode_compressed(
+                range_image_str_tensor = tf.io.decode_compressed(
                     laser.ri_return2.range_image_compressed, 'ZLIB')
                 ri = open_dataset.MatrixFloat()
                 ri.ParseFromString(bytearray(range_image_str_tensor.numpy()))
                 self.__range_images[laser.name].append(ri)
                 #
-                # camera_projection_str_tensor = tf.decode_compressed(
+                # camera_projection_str_tensor = tf.io.decode_compressed(
                 #     laser.ri_return2.camera_projection_compressed, 'ZLIB')
                 # cp = open_dataset.MatrixInt32()
                 # cp.ParseFromString(bytearray(camera_projection_str_tensor.numpy()))
