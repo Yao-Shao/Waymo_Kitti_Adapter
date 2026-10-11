@@ -1,8 +1,5 @@
 # Waymo_Kitti_Adapter
 This is a tool converting [Waymo open dataset](https://waymo.com/open/) format to [Kitti dataset](http://www.cvlibs.net/datasets/kitti/) format.
-> Author: **Yao Shao**
->
-> Contact: **yshao998@gmail.com**
 ## Instruction
 0. Follow the instructons in [QuickStart.md](https://github.com/Yao-Shao/Waymo_Kitti_Adapter/blob/master/QuickStart.md), clone the [waymo open dataset repo](https://github.com/waymo-research/waymo-open-dataset), build and test it. 
 1. Clone this repo to your computer, then copy the files in `protocol buffer` folder and paste them into `waymo open dataset` folder.
